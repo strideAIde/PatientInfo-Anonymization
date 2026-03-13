@@ -1,2 +1,9 @@
-notes.txt
 context.md
+venv/*
+docs/*
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
