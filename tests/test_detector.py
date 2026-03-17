@@ -199,6 +199,52 @@ class TestCrossLineIsolation:
         assert (60, 5, 180, 25) in detect(tokens).redact_boxes
 
 
+class TestGarbledLabelDetection:
+    def test_garbled_name_label_combined_token_flags_value(self):
+        tokens = [tok("Numo: JAYARAMA REDDY M", 0, 0, 200, 20)]
+        result = detect(tokens)
+        assert len(result.redact_boxes) == 1
+        x1, _, x2, _ = result.redact_boxes[0]
+        assert x1 > 0
+
+    def test_garbled_name_label_does_not_flag_label_portion(self):
+        tokens = [tok("Numo: JAYARAMA REDDY M", 0, 0, 200, 20)]
+        result = detect(tokens)
+        assert result.redact_boxes[0][0] > 0
+
+    def test_garbled_id_combined_token_flags_value(self):
+        tokens = [tok("ID: KILRa4498", 0, 0, 130, 20)]
+        result = detect(tokens)
+        assert len(result.redact_boxes) == 1
+        assert result.redact_boxes[0][0] > 0
+
+    def test_garbled_id_two_ocr_errors_in_value(self):
+        tokens = [tok("ID: KIERIS1912", 0, 0, 140, 20)]
+        result = detect(tokens)
+        assert len(result.redact_boxes) == 1
+        assert result.redact_boxes[0][0] > 0
+
+    def test_garbled_id_non_kier_value_not_flagged(self):
+        tokens = [tok("XY: 123456", 0, 0, 100, 20)]
+        assert detect(tokens).redact_boxes == []
+
+    def test_facility_line_not_flagged(self):
+        tokens = [tok("Facility: KARNATAKA INSTITUTE OF ENDOCRINOLOGY", 0, 0, 400, 20)]
+        assert detect(tokens).redact_boxes == []
+
+    def test_sex_field_not_flagged(self):
+        tokens = [tok("Sex: MALE", 0, 0, 100, 20)]
+        assert detect(tokens).redact_boxes == []
+
+    def test_kier_like_value_with_weak_id_label(self):
+        tokens = [tok("ID", 0, 0, 30, 20), tok("KILRa4498", 40, 0, 120, 20)]
+        assert (40, 0, 120, 20) in detect(tokens).redact_boxes
+
+    def test_non_kier_like_value_with_weak_id_label_not_flagged(self):
+        tokens = [tok("ID", 0, 0, 30, 20), tok("12345", 40, 0, 100, 20)]
+        assert (40, 0, 100, 20) not in detect(tokens).redact_boxes
+
+
 class TestMultipleLabels:
     def test_name_and_strong_id_both_detected(self):
         tokens = [

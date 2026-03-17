@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 WEIGHTS_DIR = Path(__file__).parent.parent / "weights"
 
@@ -12,7 +15,7 @@ REALESRGAN_URL = (
     "RealESRGAN_x4plus.pth"
 )
 
-OCR_MODEL_ID = "PaddlePaddle/PaddleOCR-VL-1.5"
+OCR_LANGUAGES = ["en"]
 
 
 def download_realesrgan(dest: Path, force: bool) -> None:
@@ -33,25 +36,20 @@ def download_realesrgan(dest: Path, force: bool) -> None:
 
 
 def download_ocr_model(force: bool) -> None:
-    print(f"[downloading] OCR model '{OCR_MODEL_ID}' via HuggingFace Hub")
+    print("[downloading] EasyOCR models (English)")
     try:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
-
-        kwargs = {"trust_remote_code": True}
-        if force:
-            kwargs["force_download"] = True
-
-        AutoProcessor.from_pretrained(OCR_MODEL_ID, **kwargs)
-        AutoModelForVision2Seq.from_pretrained(OCR_MODEL_ID, **kwargs)
-        print(f"[done] OCR model cached")
-    except ImportError:
+        import easyocr
+    except ImportError as exc:
         print(
-            "[error] transformers not installed. Run: pip install -r requirements.txt",
+            f"[error] easyocr not installed: {exc}\nRun: pip install easyocr",
             file=sys.stderr,
         )
         sys.exit(1)
+    try:
+        easyocr.Reader(OCR_LANGUAGES, gpu=False)
+        print("[done] EasyOCR models cached")
     except Exception as exc:
-        print(f"[error] Failed to download OCR model: {exc}", file=sys.stderr)
+        print(f"[error] Failed to initialise EasyOCR: {exc}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -69,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-ocr",
         action="store_true",
         default=False,
-        help="Skip downloading the OCR model (useful in offline environments).",
+        help="Skip downloading the OCR model.",
     )
     parser.add_argument(
         "--skip-esrgan",

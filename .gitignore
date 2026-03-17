@@ -1,6 +1,12 @@
 context.md
-venv/*
+venv/
+.venv/
 docs/*
+weights/*
+.vscode/
+output/*
+logs/*
+input/*
 
 # Python cache
 __pycache__/

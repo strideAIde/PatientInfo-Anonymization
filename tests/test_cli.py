@@ -7,7 +7,7 @@ import pytest
 
 import anonymizer.preprocessing.upscale as upscale_module
 from anonymizer.pipeline import PipelineResult
-from cli import build_parser, main
+from cli import _collect_images, build_parser, main
 
 
 def _write_jpg(path: Path, h: int = 100, w: int = 150) -> Path:
@@ -37,9 +37,9 @@ class TestBuildParser:
         args = build_parser().parse_args(["a.jpg", "b.jpg", "-o", "out/"])
         assert len(args.inputs) == 2
 
-    def test_output_dir_required(self):
-        with pytest.raises(SystemExit):
-            build_parser().parse_args(["a.jpg"])
+    def test_output_dir_defaults_to_output_folder(self):
+        args = build_parser().parse_args(["a.jpg"])
+        assert args.output_dir.name == "output"
 
     def test_no_upscale_default_false(self):
         args = build_parser().parse_args(["a.jpg", "-o", "out/"])
@@ -61,6 +61,55 @@ class TestBuildParser:
         args = build_parser().parse_args(["a.jpg", "-o", "results/"])
         assert isinstance(args.output_dir, Path)
 
+    def test_workers_default_one(self):
+        args = build_parser().parse_args(["a.jpg", "-o", "out/"])
+        assert args.workers == 1
+
+    def test_workers_flag_parsed(self):
+        args = build_parser().parse_args(["a.jpg", "-o", "out/", "--workers", "4"])
+        assert args.workers == 4
+
+
+class TestCollectImages:
+    def test_file_path_returned_as_is(self, tmp_path):
+        f = _write_jpg(tmp_path / "a.jpg")
+        assert _collect_images([f]) == [f]
+
+    def test_directory_returns_images_inside(self, tmp_path):
+        _write_jpg(tmp_path / "a.jpg")
+        _write_jpg(tmp_path / "b.jpeg")
+        found = _collect_images([tmp_path])
+        assert len(found) == 2
+
+    def test_directory_excludes_non_images(self, tmp_path):
+        _write_jpg(tmp_path / "a.jpg")
+        (tmp_path / "notes.txt").write_text("ignore me")
+        found = _collect_images([tmp_path])
+        assert all(f.suffix.lower() in {".jpg", ".jpeg"} for f in found)
+
+    def test_multiple_dirs_combined(self, tmp_path):
+        d1 = tmp_path / "d1"
+        d2 = tmp_path / "d2"
+        d1.mkdir()
+        d2.mkdir()
+        _write_jpg(d1 / "a.jpg")
+        _write_jpg(d2 / "b.jpg")
+        found = _collect_images([d1, d2])
+        assert len(found) == 2
+
+    def test_mix_of_files_and_dirs(self, tmp_path):
+        f = _write_jpg(tmp_path / "solo.jpg")
+        d = tmp_path / "batch"
+        d.mkdir()
+        _write_jpg(d / "x.jpg")
+        found = _collect_images([f, d])
+        assert len(found) == 2
+
+    def test_empty_directory_returns_empty(self, tmp_path):
+        d = tmp_path / "empty"
+        d.mkdir()
+        assert _collect_images([d]) == []
+
 
 class TestMainReturnCode:
     def test_returns_zero_on_success(self, tmp_path):
@@ -69,10 +118,10 @@ class TestMainReturnCode:
             code = main([str(src), "-o", str(tmp_path / "out")])
         assert code == 0
 
-    def test_returns_one_on_failure(self, tmp_path):
+    def test_returns_two_when_all_fail(self, tmp_path):
         missing = tmp_path / "ghost.jpg"
         code = main([str(missing), "-o", str(tmp_path / "out")])
-        assert code == 1
+        assert code == 2
 
     def test_partial_failure_returns_one(self, tmp_path):
         good = _write_jpg(tmp_path / "good.jpg")
@@ -87,6 +136,32 @@ class TestMainReturnCode:
         with patch("cli.run", return_value=_mock_result()):
             code = main([str(a), str(b), "-o", str(tmp_path / "out")])
         assert code == 0
+
+    def test_no_images_found_returns_two(self, tmp_path):
+        d = tmp_path / "empty"
+        d.mkdir()
+        code = main([str(d), "-o", str(tmp_path / "out")])
+        assert code == 2
+
+    def test_directory_input_processes_all_images(self, tmp_path):
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+        _write_jpg(src_dir / "a.jpg")
+        _write_jpg(src_dir / "b.jpg")
+        mock_run = MagicMock(return_value=_mock_result())
+        with patch("cli.run", mock_run):
+            code = main([str(src_dir), "-o", str(tmp_path / "out")])
+        assert code == 0
+        assert mock_run.call_count == 2
+
+    def test_workers_flag_processes_all_images(self, tmp_path):
+        a = _write_jpg(tmp_path / "a.jpg")
+        b = _write_jpg(tmp_path / "b.jpg")
+        mock_run = MagicMock(return_value=_mock_result())
+        with patch("cli.run", mock_run):
+            code = main([str(a), str(b), "-o", str(tmp_path / "out"), "--workers", "2"])
+        assert code == 0
+        assert mock_run.call_count == 2
 
 
 class TestOutputDirectory:
@@ -133,7 +208,7 @@ class TestQuietFlag:
             main([str(src), "-o", str(tmp_path / "out"), "--quiet"])
         assert capsys.readouterr().out == ""
 
-    def test_without_quiet_prints_output(self, tmp_path, capsys):
+    def test_without_quiet_prints_per_file_result(self, tmp_path, capsys):
         src = _write_jpg(tmp_path / "in.jpg")
         with patch("cli.run", return_value=_mock_result(regions=2)):
             main([str(src), "-o", str(tmp_path / "out")])

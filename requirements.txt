@@ -1,18 +1,22 @@
+# Step 1 — PyTorch (CPU):
+#   pip install torch torchvision
+#
+#   For NVIDIA GPU:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+#   Verify: python -c "import torch; print('torch OK:', torch.__version__)"
+#
 # Core image processing
 numpy>=1.24
 opencv-python>=4.8
 Pillow>=10.0
 
-# OCR model (PaddleOCR-VL-1.5 via HuggingFace)
-transformers>=4.45
-huggingface-hub>=0.24
-accelerate>=0.30
+# PyTorch — install via step 1 above, not from here
 torch>=2.1
 torchvision>=0.16
 
-# Real-ESRGAN upscaling
-basicsr>=1.4.2
-realesrgan>=0.3.0
+# OCR
+easyocr>=1.7
 
 # Testing
 pytest>=8.0
