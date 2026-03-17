@@ -96,7 +96,7 @@ class TestNoPii:
 
 class TestPiiDetected:
     def test_name_label_value_counted(self, tmp_path):
-        src = _write_jpg(tmp_path / "in.jpg")
+        src = _write_jpg(tmp_path / "in.jpg", h=1200, w=1600)
         dst = tmp_path / "out.jpg"
         tokens = [
             OcrToken("Name", (0, 0, 50, 20)),
@@ -107,7 +107,7 @@ class TestPiiDetected:
         assert result.regions_redacted == 1
 
     def test_tokens_found_reflects_ocr_count(self, tmp_path):
-        src = _write_jpg(tmp_path / "in.jpg")
+        src = _write_jpg(tmp_path / "in.jpg", h=1200, w=1600)
         dst = tmp_path / "out.jpg"
         tokens = [
             OcrToken("Name", (0, 0, 50, 20)),
@@ -119,7 +119,7 @@ class TestPiiDetected:
         assert result.tokens_found == 3
 
     def test_pii_region_blurred_in_output(self, tmp_path):
-        src = _write_jpg(tmp_path / "in.jpg", h=200, w=300)
+        src = _write_jpg(tmp_path / "in.jpg", h=1200, w=1600)
         dst = tmp_path / "out.jpg"
         tokens = [
             OcrToken("Name", (0, 80, 50, 100)),
@@ -134,7 +134,7 @@ class TestPiiDetected:
         assert not np.array_equal(orig_roi, out_roi)
 
     def test_multiple_pii_fields_all_counted(self, tmp_path):
-        src = _write_jpg(tmp_path / "in.jpg")
+        src = _write_jpg(tmp_path / "in.jpg", h=1200, w=1600)
         dst = tmp_path / "out.jpg"
         tokens = [
             OcrToken("Name", (0, 0, 50, 20)),

@@ -43,6 +43,11 @@ def _get_model():
         return _model
     _model_loaded = True
     try:
+        import sys
+        if "torchvision.transforms.functional_tensor" not in sys.modules:
+            import torchvision.transforms.functional as _tvf
+            sys.modules["torchvision.transforms.functional_tensor"] = _tvf
+
         from basicsr.archs.rrdbnet_arch import RRDBNet
         from realesrgan import RealESRGANer
 

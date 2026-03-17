@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from anonymizer.ocr.engine import run_ocr
 from anonymizer.pii.detector import OcrToken, detect
@@ -40,6 +43,9 @@ def run(input_path: str | Path, output_path: str | Path) -> PipelineResult:
     ocr_input = upscale_result.image
 
     raw_tokens = run_ocr(ocr_input)
+    logger.debug("OCR found %d token(s)", len(raw_tokens))
+    for tok in raw_tokens:
+        logger.debug("  token: %r  bbox=%s", tok.text, tok.bbox)
 
     if upscale_result.was_upscaled:
         tokens = _scale_tokens(raw_tokens, 1.0 / _UPSCALE_FACTOR)

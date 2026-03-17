@@ -1,104 +1,78 @@
 from __future__ import annotations
 
-import json
 import logging
+import warnings
 
-import cv2
 import numpy as np
-from PIL import Image
 
-from config import OCR_CONFIDENCE_THRESHOLD, OCR_MODEL_ID
+from config import OCR_CONFIDENCE_THRESHOLD, OCR_LANGUAGES, OCR_USE_GPU
 from anonymizer.pii.detector import OcrToken
 
 logger = logging.getLogger(__name__)
 
-_SPOTTING_PROMPT = (
-    "Perform OCR text spotting on this image. "
-    "Return a JSON array where every element has three fields: "
-    "'text' (the recognised string), "
-    "'bbox' ([x1, y1, x2, y2] integer pixel coordinates), "
-    "and 'score' (confidence between 0 and 1). "
-    "Output only the JSON array, nothing else."
-)
+_reader = None
+_reader_loaded = False
 
-_processor = None
-_model = None
-_model_loaded = False
+
+def _cuda_available() -> bool:
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except Exception:
+        return False
+
+
+def _resolve_gpu() -> bool:
+    if OCR_USE_GPU is not None:
+        return OCR_USE_GPU
+    return _cuda_available()
 
 
 def run_ocr(img: np.ndarray) -> list[OcrToken]:
-    processor, model = _get_model()
-    if processor is None or model is None:
+    reader = _get_reader()
+    if reader is None:
         return []
-    return _infer(processor, model, img)
+    return _infer(reader, img)
 
 
-def _get_model():
-    global _processor, _model, _model_loaded
-    if _model_loaded:
-        return _processor, _model
-    _model_loaded = True
+def _get_reader():
+    global _reader, _reader_loaded
+    if _reader_loaded:
+        return _reader
+    _reader_loaded = True
+    use_gpu = _resolve_gpu()
+    logger.info("EasyOCR initializing (gpu=%s)", use_gpu)
     try:
-        from transformers import AutoModelForVision2Seq, AutoProcessor
-
-        _processor = AutoProcessor.from_pretrained(OCR_MODEL_ID, trust_remote_code=True)
-        _model = AutoModelForVision2Seq.from_pretrained(
-            OCR_MODEL_ID, trust_remote_code=True
-        )
-        _model.eval()
+        import easyocr
+        if not use_gpu:
+            warnings.filterwarnings(
+                "ignore",
+                message=".*pin_memory.*no accelerator.*",
+                category=UserWarning,
+            )
+        _reader = easyocr.Reader(OCR_LANGUAGES, gpu=use_gpu)
     except Exception as e:
-        logger.warning("OCR model unavailable: %s", e)
-        _processor = None
-        _model = None
-    return _processor, _model
+        logger.warning("EasyOCR unavailable: %s", e)
+        _reader = None
+    return _reader
 
 
-def _infer(processor, model, img: np.ndarray) -> list[OcrToken]:
-    import torch
-
-    pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    inputs = processor(text=_SPOTTING_PROMPT, images=pil_img, return_tensors="pt")
-    with torch.no_grad():
-        output_ids = model.generate(**inputs, max_new_tokens=2048)
-    raw = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
-    return _parse_output(raw, img.shape)
-
-
-def _parse_output(raw: str, img_shape: tuple) -> list[OcrToken]:
-    start = raw.find("[")
-    end = raw.rfind("]") + 1
-    if start == -1 or end == 0:
-        return []
-    try:
-        records = json.loads(raw[start:end])
-    except json.JSONDecodeError:
-        logger.warning("OCR output is not valid JSON")
-        return []
-    if not isinstance(records, list):
-        return []
-
-    h, w = img_shape[:2]
+def _infer(reader, img: np.ndarray) -> list[OcrToken]:
+    results = reader.readtext(img)
     tokens: list[OcrToken] = []
-    for rec in records:
-        if not isinstance(rec, dict):
-            continue
-        text = str(rec.get("text", "")).strip()
-        if not text:
-            continue
-        score = float(rec.get("score", 1.0))
+    h, w = img.shape[:2]
+    for (quad, text, score) in results:
         if score < OCR_CONFIDENCE_THRESHOLD:
             continue
-        bbox = rec.get("bbox", [])
-        if not isinstance(bbox, list) or len(bbox) != 4:
+        text = text.strip()
+        if not text:
             continue
-        try:
-            x1, y1, x2, y2 = (int(v) for v in bbox)
-        except (TypeError, ValueError):
-            continue
-        x1 = max(0, min(x1, w - 1))
-        y1 = max(0, min(y1, h - 1))
-        x2 = max(0, min(x2, w - 1))
-        y2 = max(0, min(y2, h - 1))
+        xs = [pt[0] for pt in quad]
+        ys = [pt[1] for pt in quad]
+        x1 = max(0, min(int(min(xs)), w - 1))
+        y1 = max(0, min(int(min(ys)), h - 1))
+        x2 = max(0, min(int(max(xs)), w - 1))
+        y2 = max(0, min(int(max(ys)), h - 1))
         if x1 >= x2 or y1 >= y2:
             continue
         tokens.append(OcrToken(text=text, bbox=(x1, y1, x2, y2)))
@@ -106,7 +80,6 @@ def _parse_output(raw: str, img_shape: tuple) -> list[OcrToken]:
 
 
 def reset_model_cache() -> None:
-    global _processor, _model, _model_loaded
-    _processor = None
-    _model = None
-    _model_loaded = False
+    global _reader, _reader_loaded
+    _reader = None
+    _reader_loaded = False

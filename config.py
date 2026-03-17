@@ -15,8 +15,10 @@ UPSCALE_ENABLED: bool = True
 UPSCALE_THRESHOLD_PX: int = 1200   # apply upscaling if shortest edge < this
 
 # ── OCR ────────────────────────────────────────────────────────────────────────
-OCR_MODEL_ID: str = "PaddlePaddle/PaddleOCR-VL-1.5"
-OCR_CONFIDENCE_THRESHOLD: float = 0.6
+OCR_LANGUAGES: list[str] = ["en"]
+OCR_CONFIDENCE_THRESHOLD: float = 0.3
+# Set to True to force GPU, False to force CPU, None to auto-detect
+OCR_USE_GPU: bool | None = None
 # Vertical tolerance (px) for grouping OCR tokens into the same text line
 LINE_Y_TOLERANCE_PX: int = 10
 
