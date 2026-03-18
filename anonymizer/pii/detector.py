@@ -16,9 +16,11 @@ from anonymizer.pii.patterns import (
     looks_like_patient_name,
 )
 
-_COMBINED_NAME = re.compile(r"(?i)^(subject\s+name|name)\s*:?\s+(.+)$")
-_COMBINED_STRONG_ID = re.compile(r"(?i)^(patient\s+id)\s*:?\s+(.+)$")
-_COMBINED_WEAK_ID = re.compile(r"(?i)^(id)\s*:?\s+(kier\s*\d{4,8}.*)$")
+_COMBINED_NAME = re.compile(r"(?i)^(subject\s+name|name)\s*[;:]?\s+(.+)$")
+_COMBINED_STRONG_ID = re.compile(r"(?i)^(patient\s+id)\s*[;:]?\s+(.+)$")
+_COMBINED_WEAK_ID = re.compile(r"(?i)^(id)\s*[;:]?\s+(kier\s*\d{4,8}.*)$")
+
+_HONORIFICS: frozenset[str] = frozenset(["DR", "MR", "MRS", "MS", "PROF", "REV", "ST"])
 
 
 @dataclass(frozen=True)
@@ -86,11 +88,11 @@ def _split_combined_token(tok: OcrToken) -> list[OcrToken]:
                 OcrToken(text=value_text, bbox=(split_x, y1, x2, y2)),
             ]
 
-    colon_pos = tok.text.find(":")
-    if colon_pos > 0:
-        label = tok.text[:colon_pos].strip()
-        value = tok.text[colon_pos + 1:].strip()
-        if value and 1 <= len(label) <= 10 and " " not in label:
+    sep_pos = next((i for i, c in enumerate(tok.text) if c in ":;"), -1)
+    if sep_pos > 0:
+        label = tok.text[:sep_pos].strip()
+        value = tok.text[sep_pos + 1:].strip()
+        if value and 1 <= len(label) <= 10 and " " not in label and label.upper() not in _HONORIFICS:
             if looks_like_patient_name(value) or looks_like_kier_id(value):
                 canonical = "Name" if looks_like_patient_name(value) else "ID"
                 total = len(tok.text)
@@ -117,7 +119,7 @@ def _scan_line(line: list[OcrToken]) -> list[tuple[int, int, int, int]]:
                     or is_name_label(val.text)
                     or is_strong_id_label(val.text)
                     or is_weak_id_label(val.text)
-                    or ":" in val.text
+                    or any(c in val.text for c in ":;")
                 ):
                     break
                 boxes.append(val.bbox)
