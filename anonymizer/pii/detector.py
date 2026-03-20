@@ -16,7 +16,7 @@ from anonymizer.pii.patterns import (
     looks_like_patient_name,
 )
 
-_COMBINED_NAME = re.compile(r"(?i)^(subject\s+name|name)\s*[;:]?\s+(.+)$")
+_COMBINED_NAME = re.compile(r"(?i)^(sub\w+?\s*(?:name|na\w{1,3}(?=[\s;:\-]|$))|name)(?:[;:\-]\s*|\s+)?(\w.+)$")
 _COMBINED_STRONG_ID = re.compile(r"(?i)^(patient\s+id)\s*[;:]?\s+(.+)$")
 _COMBINED_WEAK_ID = re.compile(r"(?i)^(id)\s*[;:]?\s+(kier\s*\d{4,8}.*)$")
 
@@ -39,9 +39,13 @@ def detect(tokens: list[OcrToken]) -> DetectionResult:
     for tok in tokens:
         expanded.extend(_split_combined_token(tok))
     lines = _group_into_lines(expanded)
+    seen: set[tuple[int, int, int, int]] = set()
     boxes: list[tuple[int, int, int, int]] = []
     for line in lines:
-        boxes.extend(_scan_line(line))
+        for box in _scan_line(line):
+            if box not in seen:
+                seen.add(box)
+                boxes.append(box)
     return DetectionResult(redact_boxes=boxes)
 
 
@@ -125,7 +129,14 @@ def _scan_line(line: list[OcrToken]) -> list[tuple[int, int, int, int]]:
                 boxes.append(val.bbox)
 
         elif is_strong_id_label(tok.text) and i + 1 < n:
-            boxes.append(line[i + 1].bbox)
+            tok_y = (tok.bbox[1] + tok.bbox[3]) / 2.0
+            for j in range(i + 1, n):
+                val = line[j]
+                if abs((val.bbox[1] + val.bbox[3]) / 2.0 - tok_y) <= LINE_Y_TOLERANCE_PX:
+                    boxes.append(val.bbox)
+                    break
+            else:
+                boxes.append(line[i + 1].bbox)
 
         elif is_weak_id_label(tok.text) and i + 1 < n:
             val = line[i + 1]

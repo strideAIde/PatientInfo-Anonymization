@@ -4,11 +4,11 @@ import re
 
 from config import NAME_STOP_WORDS
 
-_NAME_LABEL = re.compile(r"(?i)^(subject\s+name|name\s*[;:]?)$")
+_NAME_LABEL = re.compile(r"(?i)^(sub\w+?\s*(?:name|na\w{1,3}(?=[\s;:\-]|$))|name\s*[;:]?)$")
 _STRONG_ID_LABEL = re.compile(r"(?i)^patient\s+id\s*[;:]?$")
 _WEAK_ID_LABEL = re.compile(r"(?i)^id\s*[;:]?$")
 _KIER_ID_VALUE = re.compile(r"(?i)^kier\s*\d{4,8}$")
-_KIER_ANYWHERE = re.compile(r"(?i)kier[i1l]?\s*\d{3,8}")
+_KIER_ANYWHERE = re.compile(r"(?i)kier[i1l]?\s*'?\s*\d{3,8}")
 
 _STOP_WORDS: frozenset[str] = frozenset(w.upper() for w in NAME_STOP_WORDS)
 
