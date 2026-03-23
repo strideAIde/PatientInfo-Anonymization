@@ -6,6 +6,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import torch
+
 import anonymizer.preprocessing.upscale as _upscale_module
 from anonymizer.pipeline import run
 
@@ -89,6 +91,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.no_upscale:
         _upscale_module.UPSCALE_ENABLED = False
+
+    if args.workers > 1 and torch.cuda.is_available():
+        print(
+            "WARNING: --workers > 1 is unsafe with GPU; clamping to 1 to avoid CUDA context conflicts.",
+            file=sys.stderr,
+        )
+        args.workers = 1
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
 

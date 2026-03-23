@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import torch
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,9 @@ def run(input_path: str | Path, output_path: str | Path) -> PipelineResult:
     redact_result = redact(original, detection.redact_boxes, transform)
 
     _save(redact_result.image, output_path)
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     return PipelineResult(
         output_path=output_path,
